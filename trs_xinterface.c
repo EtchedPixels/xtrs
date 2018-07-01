@@ -155,6 +155,8 @@ static XrmOptionDescRec opts[] = {
 {"-noshiftbracket","*shiftbracket",XrmoptionNoArg,      (caddr_t)"off"},
 {"-emtsafe",    "*emtsafe",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-noemtsafe",  "*emtsafe",     XrmoptionNoArg,         (caddr_t)"off"},
+{"-huffman",    "*huffman",     XrmoptionNoArg,         (caddr_t)"on"},
+{"-supermem",   "*supermem",    XrmoptionNoArg,         (caddr_t)"on"},
 };
 
 static int num_opts = (sizeof opts / sizeof opts[0]);
@@ -436,6 +438,24 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
       grafyx_set_microlabs(True);
     } else if (strcmp(value.addr,"off") == 0) {
       grafyx_set_microlabs(False);
+    }
+  }
+
+  (void) sprintf(option, "%s%s", program_name, ".huffman");
+  if (XrmGetResource(x_db, option, "Xtrs.huffman", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      huffman_ram = 1;
+    } else if (strcmp(value.addr,"off") == 0) {
+      huffman_ram = 0;
+    }
+  }
+
+  (void) sprintf(option, "%s%s", program_name, ".supermem");
+  if (XrmGetResource(x_db, option, "Xtrs.supermem", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      supermem = 1;
+    } else if (strcmp(value.addr,"off") == 0) {
+      supermem = 0;
     }
   }
 

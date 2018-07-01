@@ -45,6 +45,7 @@ void z80_out(int port, int value)
   if (trs_io_debug_flags & IODEBUG_OUT) {
     debug("out (0x%02x), 0x%02x; pc 0x%04x\n", port, value, z80_state.pc.word);
   }
+
   /* First, ports common to all models */
   switch (port) {
   case TRS_HARD_WP:       /* 0xC0 */
@@ -71,6 +72,11 @@ void z80_out(int port, int value)
   case TRS_UART_DATA:     /* 0xEB */
     trs_uart_data_out(value);
     break;
+  case 0x43: /* Alpha Technologies SuperMem */
+      if (trs_model < 4) {
+        mem_bank_base(value);
+        break;
+      }
   }
 
   if (trs_model == 1) {
@@ -128,6 +134,10 @@ void z80_out(int port, int value)
   } else {
     /* Next, Models III/4/4P only */
     switch (port) {
+    case 0x43: /* Alpha Technologies SuperMem */
+      if (trs_model == 3)
+          mem_bank_base(value);
+      break;
     case 0x79: /* Orchestra-90 left channel */
       trs_orch90_out(1, value);
       break;
@@ -185,6 +195,10 @@ void z80_out(int port, int value)
     case 0x93:
       trs_sound_out(value & 1);
       break;
+    case 0x94:			/* Huffman memory expansion */
+      if (trs_model >= 4)
+        mem_bank_base(value);
+      break;
     case 0x9C:
     case 0x9D: /* !!? */
     case 0x9E: /* !!? */
@@ -233,6 +247,7 @@ void z80_out(int port, int value)
     case 0xF5:
     case 0xF6:
     case 0xF7:
+      /* This should cause a 1-2us wait in T states... */
       trs_disk_select_write(value);
       break;
     case 0xF8:
@@ -365,6 +380,11 @@ int z80_in(int port)
   case TRS_UART_DATA:     /* 0xEB */
     value = trs_uart_data_in();
     goto done;
+  case 0x43: /* Supermem memory expansion */
+    if (trs_model < 4) {
+      value = mem_read_bank_base();
+      goto done;
+    }
   }
 
   if (trs_model == 1) {
@@ -378,6 +398,9 @@ int z80_in(int port)
       goto done;
     case 0x04: /* HRG read data byte */
       value = hrg_read_data();
+      goto done;
+    case 0x43: /* Supermem memory expansion */
+      value = mem_read_bank_base();
       goto done;
     case 0xF0:
     case 0xF1:
@@ -401,12 +424,19 @@ int z80_in(int port)
   } else {
     /* Models III/4/4P only */
     switch (port) {
+    case 0x43: /* Supermem memory expansion */
+      if (trs_model == 3)
+          value = mem_read_bank_base();
+      goto done;
     case 0x82:
       if (trs_model >= 3) {
 	value = grafyx_read_data();
 	goto done;
       }
       break;
+    case 0x94: /* Huffman memory expansion */
+      value = mem_read_bank_base();
+      goto done;
     case 0x9C: /* !!? */
     case 0x9D: /* !!? */
     case 0x9E: /* !!? */

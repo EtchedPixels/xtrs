@@ -130,8 +130,13 @@ int trs_disk_motoroff(void);
 
 void trs_change_all(void);
 
+extern int huffman_ram;
+extern int supermem;
+
 void mem_video_page(int which);
 void mem_bank(int which);
+void mem_bank_base(int bits);
+int mem_read_bank_base(void);
 void mem_map(int which);
 void mem_romin(int state);
 

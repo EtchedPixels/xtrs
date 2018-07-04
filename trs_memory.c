@@ -255,7 +255,8 @@ void mem_romin(int state)
 
 void mem_init()
 {
-    if (trs_model <= 3) {
+    /* A selector fitted machine potentially has real RAM low */
+    if (trs_model <= 3 && selector == 0) {
 	rom = &memory[ROM_START];
 	video = &memory[VIDEO_START];
 	trs_video_size = 1024;
@@ -263,7 +264,10 @@ void mem_init()
 	/* +1 so strings from mem_pointer are NUL-terminated */
 	rom = (Uchar *) calloc(MAX_ROM_SIZE+1, 1);
 	video = (Uchar *) calloc(MAX_VIDEO_SIZE+1, 1);
-	trs_video_size = MAX_VIDEO_SIZE;
+	if (trs_model == 1)
+          trs_video_size = 1024;
+        else
+	  trs_video_size = MAX_VIDEO_SIZE;
     }
     mem_map(0);
     mem_bank(0);
@@ -320,12 +324,7 @@ static int trs80_model1_ram(int address)
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
     offset += bank_base;
-  /* A model 1 has no RAM at 0-3FFF to demux. An LNW80 can do. If we do
-     LNW80 we'll need to store the ROM in its own block and change these */
-  if (offset >= 0x4000)
-    return memory[offset];
-  else
-    return 0xFF;
+  return memory[offset];
 }
 
 static int trs80_model1_mmio(int address)
@@ -470,8 +469,7 @@ void trs80_model1_write_mem(int address, int value)
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
     offset += bank_base;
-  if (offset >= 0x4000)
-    memory[offset] = value;
+  memory[offset] = value;
 }
 
 void trs80_model1_write_mmio(int address, int value)
@@ -674,8 +672,6 @@ static Uchar *trs80_model1_ram_addr(int address)
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
     offset += bank_base;
-  if (offset < 0x4000)
-    return NULL;
   return memory + offset;
 }
 

@@ -98,6 +98,11 @@ void z80_out(int port, int value)
     case 0xB9: /* Orchestra-85 left channel */
       trs_orch90_out(1, value);
       break;
+      /* Selector doesn't decode A5 */
+    case 0x1F:
+    case 0x3F:
+      selector_out(value);
+      break;
     case 0xB5: /* Orchestra-85 right channel */
       trs_orch90_out(2, value);
       break;

@@ -157,6 +157,7 @@ static XrmOptionDescRec opts[] = {
 {"-noemtsafe",  "*emtsafe",     XrmoptionNoArg,         (caddr_t)"off"},
 {"-huffman",    "*huffman",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-supermem",   "*supermem",    XrmoptionNoArg,         (caddr_t)"on"},
+{"-selector",   "*selector",    XrmoptionNoArg,         (caddr_t)"on"},
 };
 
 static int num_opts = (sizeof opts / sizeof opts[0]);
@@ -450,10 +451,20 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
     }
   }
 
+  (void) sprintf(option, "%s%s", program_name, ".selector");
+  if (XrmGetResource(x_db, option, "Xtrs.selector", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      selector = 1;
+    } else if (strcmp(value.addr,"off") == 0) {
+      selector = 0;
+    }
+  }
+
   (void) sprintf(option, "%s%s", program_name, ".supermem");
   if (XrmGetResource(x_db, option, "Xtrs.supermem", &type, &value)) {
     if (strcmp(value.addr,"on") == 0) {
       supermem = 1;
+      selector = 0;
     } else if (strcmp(value.addr,"off") == 0) {
       supermem = 0;
     }

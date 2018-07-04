@@ -67,6 +67,8 @@ unsigned int bank_base = 0x10000;
 unsigned char mem_command = 0;
 int huffman_ram = 0;
 int supermem = 0;
+int selector = 0;
+int selector_reg = 0;
 
 /*SUPPRESS 53*/
 /*SUPPRESS 112*/
@@ -148,6 +150,27 @@ int mem_read_bank_base(void)
 	return 0xFF;
 }
 
+void selector_out(unsigned char value)
+{
+	/* Not all bits are necessarily really present but hey what
+	   you can't read back you can't tell */
+	selector_reg = value;
+	/* Always Model 1 */
+	memory_map = (trs_model << 4) + (selector_reg & 7);
+	/* 0x10 is already the default tandy map we add 11-17 in the style
+	   of the model 4 approach */
+	if (selector_reg & 0x8) {
+		/* External RAM enabled */
+		/* Effectively the selector bits << 15 */
+		/* Low 64K is the base memory */
+		bank_base = 32768 + ((selector_reg & 0x30) << 11);
+		/* Now are we mapping it high or low */
+		if (selector_reg & 1) /* Low */
+			bank_base += 32768;
+	} else
+		bank_base = 0;
+}
+
 /* Check for changes in all floppy, hard, and stringy drives. */
 void
 trs_change_all()
@@ -191,6 +214,7 @@ void trs_reset(int poweron)
     if (trs_model == 1) {
 	hrg_onoff(0);		/* Switch off HRG1B hi-res graphics. */
 	bank_base = 0;
+	selector_reg = 0;
     }
     trs_kb_reset();  /* Part of keyboard stretch kludge */
 
@@ -271,26 +295,88 @@ void hex_transfer_address(int address)
     /* Ignore */
 }
 
+static int trs80_model1_ram(int address)
+{
+  int bank = 0x8000;
+  int offset = address;
+
+  /* Model 4 doesn't have banking in Model 1 mode */
+  if (trs_model != 1)
+    return memory[address];
+  /* Selector mode 6 remaps RAM from 0000-3FFF to C000-FFFF while keeping
+     the ROMs visible */
+  /* selector_reg is always 0 if selector disabled so we don't need an
+     extra check */
+  if ((selector_reg & 7) == 6) {
+    if (address >= 0xC000) {
+      /* We have no low 16K of RAM. This is for the LNW80 really */
+      if (!(selector_reg & 8))
+	return 0xFF;
+      /* Use the low 16K, and then bank it. I'm not 100% sure how the
+         PAL orders the two */
+      offset &= 0x3FFF;
+    }
+  }
+  /* Bank low on odd modes */
+  if ((selector_reg & 1) == 1)
+    bank = 0;
+  /* Deal with 32K banking from selector or supermem */
+  if ((address & 0x8000) == bank)
+    return memory[offset + bank_base];
+  else
+    return memory[offset];
+}
+
+static int trs80_model1_mmio(int address)
+{
+  if (address >= VIDEO_START) return memory[address];
+  if (address < trs_rom_size) return memory[address];
+  if (address == TRSDISK_DATA) return trs_disk_data_read();
+  if (TRS_INTLATCH(address)) return trs_interrupt_latch_read();
+  if (address == TRSDISK_STATUS) return trs_disk_status_read();
+  if (address == PRINTER_ADDRESS) return trs_printer_read();
+  if (address == TRSDISK_TRACK) return trs_disk_track_read();
+  if (address == TRSDISK_SECTOR) return trs_disk_sector_read();
+  /* With a selector 768 bytes poke through the hole */
+  if (address >= 0x3900 && selector)
+    return trs80_model1_ram(address);
+  if (address >= KEYBOARD_START) return trs_kb_mem_read(address);
+  return 0xff;
+}
+
 int mem_read(int address)
 {
     address &= 0xffff; /* allow callers to be sloppy */
 
     switch (memory_map) {
       case 0x10: /* Model I */
-        /* A Model 4 using a model 1 map doesn't do this shift with
-           a Supermem card */
-        if (trs_model == 1 && address >= 32768)
-          return memory[address + bank_base];
-	if (address >= VIDEO_START) return memory[address];
-	if (address < trs_rom_size) return memory[address];
-	if (address == TRSDISK_DATA) return trs_disk_data_read();
-	if (TRS_INTLATCH(address)) return trs_interrupt_latch_read();
-	if (address == TRSDISK_STATUS) return trs_disk_status_read();
-	if (address == PRINTER_ADDRESS)	return trs_printer_read();
-	if (address == TRSDISK_TRACK) return trs_disk_track_read();
-	if (address == TRSDISK_SECTOR) return trs_disk_sector_read();
-	if (address >= KEYBOARD_START) return trs_kb_mem_read(address);
-	return 0xff;
+        if (address < 0x4000)
+	  return trs80_model1_mmio(address & 0x3FFF);
+	else
+	  return trs80_model1_ram(address);
+      case 0x11: /* Model 1: selector mode 1 (all RAM except I/O high */
+        if (address >= 0xF7E0 && address <= 0xF7FF)
+          return trs80_model1_mmio(address & 0x3FFF);
+	return trs80_model1_ram(address);
+      case 0x12: /* Model 1 selector mode 2 (ROM disabled) */
+        if (address < 0x37E0)
+          return trs80_model1_ram(address);
+	if (address < 0x4000)
+	  return trs80_model1_mmio(address);
+	return trs80_model1_ram(address);
+      case 0x13: /* Model 1: selector mode 3 (CP/M mode) */
+        if (address >= 0xF7E0)
+          return trs80_model1_mmio(address & 0x3FFF);
+	/* Fall through */
+      case 0x14: /* Model 1: All RAM banking high */
+      case 0x15: /* Model 1: All RAM banking low */
+	return trs80_model1_ram(address);
+      case 0x16: /* Model 1: Low 16K in top 16K */
+	if (address < 0x4000)
+	  return trs80_model1_mmio(address);
+	return trs80_model1_ram(address);
+      case 0x17: /* Model 1: Described in the selector doc as 'not useful' */
+        return 0xFF;	/* Not clear what really happens */
 
       case 0x30: /* Model III */
          /* A Model 4 using a model 1 map doesn't do this shift with
@@ -353,6 +439,80 @@ int mem_read(int address)
     return 0xff;
 }
 
+void trs80_model1_write_mem(int address, int value)
+{
+  int bank = 0x8000;
+  int offset = address;
+
+  /* Model 4 doesn't have banking in Model 1 mode */
+  if (trs_model != 1) {
+    memory[address] = value;
+    return;
+  }
+  /* Selector mode 6 remaps RAM from 0000-3FFF to C000-FFFF while keeping
+     the ROMs visible */
+  /* selector_reg is always 0 if selector disabled so we don't need an
+     extra check */
+  if ((selector_reg & 7) == 6) {
+    if (address >= 0xC000) {
+      /* We have no low 16K of RAM. This is for the LNW80 really */
+      if (!(selector_reg & 8))
+	return;
+      /* Use the low 16K, and then bank it. I'm not 100% sure how the
+         PAL orders the two */
+      offset &= 0x3FFF;
+    }
+  }
+  /* Bank low on odd modes */
+  if ((selector_reg & 1) == 1)
+    bank = 0;
+  /* Deal with 32K banking from selector or supermem */
+  if ((address & 0x8000) == bank)
+    memory[offset + bank_base] = value;
+  else
+    memory[offset] = value;
+}
+
+void trs80_model1_write_mmio(int address, int value)
+{
+  if (address >= VIDEO_START) {
+    int vaddr = address + video_offset;
+    /* FIXME: this should be a command line option */
+#if UPPERCASE
+    /*
+     * Video write.  Hack here to make up for the missing bit 6
+     * video ram, emulating the gate in Z30.
+     */
+    if (trs_model == 1) {
+      if(value & 0xa0)
+        value &= 0xbf;
+      else
+        value |= 0x40;
+    }
+#endif
+    if (video[vaddr] != value) {
+      video[vaddr] = value;
+      trs_screen_write_char(vaddr, value);
+    }
+  } else if (address == PRINTER_ADDRESS) {
+    trs_printer_write(value);
+  } else if (address == CASSETTE_SELECT) {
+    trs_cassette_select(value);
+  } else if (address == TRSDISK_DATA) {
+    trs_disk_data_write(value);
+  } else if (address == TRSDISK_STATUS) {
+    trs_disk_command_write(value);
+  } else if (address == TRSDISK_TRACK) {
+    trs_disk_track_write(value);
+  } else if (address == TRSDISK_SECTOR) {
+    trs_disk_sector_write(value);
+  } else if (TRSDISK_SELECT(address)) {
+    trs_disk_select_write(value);
+  } else if (address >= 0x3900)
+    trs80_model1_write_mem(address, value);
+}
+
+
 void mem_write(int address, int value)
 {
     address &= 0xffff;
@@ -361,44 +521,40 @@ void mem_write(int address, int value)
       case 0x10: /* Model I */
         /* A Model 4 using a model 1 map doesn't do this shift with
            a Supermem card */
-        if (trs_model == 1 && address >= 32768)
-          memory[address + bank_base] = value;
-        else if (address >= RAM_START) {
-	    memory[address] = value;
-	} else if (address >= VIDEO_START) {
-	    int vaddr = address + video_offset;
-#if UPPERCASE
-	    /*
-	     * Video write.  Hack here to make up for the missing bit 6
-	     * video ram, emulating the gate in Z30.
-	     */
-	    if (trs_model == 1) {
-		if(value & 0xa0)
-		  value &= 0xbf;
-		else
-		  value |= 0x40;
-	    }
-#endif
-	    if (video[vaddr] != value) {
-		video[vaddr] = value;
-		trs_screen_write_char(vaddr, value);
-	    }
-	} else if (address == PRINTER_ADDRESS) {
-	    trs_printer_write(value);
-	} else if (address == CASSETTE_SELECT) {
-	    trs_cassette_select(value);
-	} else if (address == TRSDISK_DATA) {
-	    trs_disk_data_write(value);
-	} else if (address == TRSDISK_STATUS) {
-	    trs_disk_command_write(value);
-	} else if (address == TRSDISK_TRACK) {
-	    trs_disk_track_write(value);
-	} else if (address == TRSDISK_SECTOR) {
-	    trs_disk_sector_write(value);
-	} else if (TRSDISK_SELECT(address)) {
-	    trs_disk_select_write(value);
-	}
+        if (address >= RAM_START)
+          trs80_model1_write_mem(address, value);
+	else
+	  trs80_model1_write_mmio(address, value);
 	break;
+      case 0x11: /* Model 1: selector mode 1 (all RAM except I/O high */
+        if (address >= 0xF7E0 && address <= 0xF7FF)
+          trs80_model1_write_mmio(address & 0x3FFF, value);
+	else
+	  trs80_model1_write_mem(address, value);
+	break;
+      case 0x12: /* Model 1 selector mode 2 (ROM disabled) */
+        if (address < 0x37E0)
+          trs80_model1_write_mem(address, value);
+	else if (address < 0x4000)
+	  trs80_model1_write_mmio(address, value);
+	else
+	  trs80_model1_write_mem(address, value);
+	break;
+      case 0x13: /* Model 1: selector mode 3 (CP/M mode) */
+        if (address >= 0xF7E0)
+          trs80_model1_write_mmio(address & 0x3FFF, value);
+	/* Fall through */
+      case 0x14: /* Model 1: All RAM banking high */
+      case 0x15: /* Model 1: All RAM banking low */
+	trs80_model1_write_mem(address, value);
+	break;
+      case 0x16: /* Model 1: Low 16K in top 16K */
+	if (address < 0x4000)
+	  trs80_model1_write_mmio(address, value);
+	else
+	  trs80_model1_ram(address);
+      case 0x17: /* Model 1: Described in the selector doc as 'not useful' */
+        break;	/* Not clear what really happens */
 
       case 0x30: /* Model III */
         /* A Model 4 using a model 1 map doesn't do this shift with
@@ -489,18 +645,89 @@ void mem_write_word(int address, int value)
     mem_write(address, value >> 8);
 }
 
+static Uchar *trs80_model1_ram_addr(int address)
+{
+  int bank = 0x8000;
+  int offset = address;
+
+  /* Model 4 doesn't have banking in Model 1 mode */
+  if (trs_model != 1)
+    return memory + address;
+  /* Selector mode 6 remaps RAM from 0000-3FFF to C000-FFFF while keeping
+     the ROMs visible */
+  /* selector_reg is always 0 if selector disabled so we don't need an
+     extra check */
+  if ((selector_reg & 7) == 6) {
+    if (address >= 0xC000) {
+      /* We have no low 16K of RAM. This is for the LNW80 really */
+      if (!(selector_reg & 8))
+	return NULL;
+      /* Use the low 16K, and then bank it. I'm not 100% sure how the
+         PAL orders the two */
+      offset &= 0x3FFF;
+    }
+  }
+  /* Bank low on odd modes */
+  if ((selector_reg & 1) == 1)
+    bank = 0;
+  /* Deal with 32K banking from selector or supermem */
+  if ((address & 0x8000) == bank)
+    return memory + offset + bank_base;
+  else
+    return memory + offset;
+}
+
+static Uchar *trs80_model1_mmio_addr(int address, int writing)
+{
+  if (address >= VIDEO_START) return memory + address;
+  if (address < trs_rom_size && !writing) return memory + address;
+  /* With a selector 768 bytes poke through the hole */
+  if (address >= 0x3900 && selector)
+    return trs80_model1_ram_addr(address);
+  return NULL;
+}
+
 /*
  * Get a pointer to the given address.  Note that there is no checking
  * whether the next virtual address is physically contiguous.  The
  * caller is responsible for making sure his strings don't span 
  * memory map boundaries.
+ *
+ * Needs to die...
  */
 Uchar *mem_pointer(int address, int writing)
 {
     address &= 0xffff;
 
     switch (memory_map + (writing << 3)) {
-      case 0x10: /* Model I reading */
+      case 0x10: /* Model I */
+      case 0x18:
+        if (address < 0x4000)
+	  return trs80_model1_mmio_addr(address & 0x3FFF, writing);
+	else
+	  return trs80_model1_ram_addr(address);
+      case 0x11: /* Model 1: selector mode 1 (all RAM except I/O high */
+      case 0x19:
+	return trs80_model1_ram_addr(address);
+      case 0x12: /* Model 1 selector mode 2 (ROM disabled) */
+        if (address < 0x37E0)
+          return trs80_model1_ram_addr(address);
+	if (address < 0x4000)
+	  return trs80_model1_mmio_addr(address, writing);
+	return trs80_model1_ram_addr(address);
+      case 0x13: /* Model 1: selector mode 3 (CP/M mode) */
+        if (address >= 0xF7E0)
+          return trs80_model1_mmio_addr(address & 0x3FFF, writing);
+	/* Fall through */
+      case 0x14: /* Model 1: All RAM banking high */
+      case 0x15: /* Model 1: All RAM banking low */
+	return trs80_model1_ram_addr(address);
+      case 0x16: /* Model 1: Low 16K in top 16K */
+	if (address < 0x4000)
+	  return trs80_model1_mmio_addr(address, writing);
+	return trs80_model1_ram_addr(address);
+      case 0x17: /* Model 1: Described in the selector doc as 'not useful' */        return NULL;	/* Not clear what really happens */
+        return NULL;
       case 0x30: /* Model III reading */
         if (trs_model < 4 && address >= 32768)
 	    return &memory[address + bank_base];
@@ -508,7 +735,6 @@ Uchar *mem_pointer(int address, int writing)
 	if (address < trs_rom_size) return &rom[address];
 	return NULL;
 
-      case 0x18: /* Model I writing */
       case 0x38: /* Model III writing */
 	if (address >= VIDEO_START) return &memory[address];
 	return NULL;

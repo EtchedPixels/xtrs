@@ -132,6 +132,9 @@ void trs_change_all(void);
 
 extern int huffman_ram;
 extern int supermem;
+extern int selector;
+
+extern void selector_out(unsigned char);
 
 void mem_video_page(int which);
 void mem_bank(int which);

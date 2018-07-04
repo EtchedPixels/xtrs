@@ -591,7 +591,7 @@ mem_block_transfer(Ushort dest, Ushort source, int direction, Ushort count)
 {
     int ret;
     /* special case for screen scroll */
-    if((trs_model <= 3 || (memory_map & 3) < 2) &&
+    if(0 && (trs_model <= 3 || (memory_map & 3) < 2) &&
        (dest == VIDEO_START) && (source == VIDEO_START + 0x40) &&
        (count == 0x3c0) && (direction > 0) && !grafyx_m3_active())
     {

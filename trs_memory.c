@@ -309,9 +309,6 @@ static int trs80_model1_ram(int address)
      extra check */
   if ((selector_reg & 7) == 6) {
     if (address >= 0xC000) {
-      /* We have no low 16K of RAM. This is for the LNW80 really */
-      if (!(selector_reg & 8))
-	return 0xFF;
       /* Use the low 16K, and then bank it. I'm not 100% sure how the
          PAL orders the two */
       offset &= 0x3FFF;
@@ -322,9 +319,13 @@ static int trs80_model1_ram(int address)
     bank = 0;
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
-    return memory[offset + bank_base];
-  else
+    offset += bank_base;
+  /* A model 1 has no RAM at 0-3FFF to demux. An LNW80 can do. If we do
+     LNW80 we'll need to store the ROM in its own block and change these */
+  if (offset >= 0x4000)
     return memory[offset];
+  else
+    return 0xFF;
 }
 
 static int trs80_model1_mmio(int address)
@@ -468,8 +469,8 @@ void trs80_model1_write_mem(int address, int value)
     bank = 0;
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
-    memory[offset + bank_base] = value;
-  else
+    offset += bank_base;
+  if (offset >= 0x4000)
     memory[offset] = value;
 }
 
@@ -672,9 +673,10 @@ static Uchar *trs80_model1_ram_addr(int address)
     bank = 0;
   /* Deal with 32K banking from selector or supermem */
   if ((address & 0x8000) == bank)
-    return memory + offset + bank_base;
-  else
-    return memory + offset;
+    offset += bank_base;
+  if (offset < 0x4000)
+    return NULL;
+  return memory + offset;
 }
 
 static Uchar *trs80_model1_mmio_addr(int address, int writing)

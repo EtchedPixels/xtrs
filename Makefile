@@ -74,7 +74,7 @@ default: $(PROGS) docs
 
 all: default z80code gxtrs
 
-docs: $(MANPAGES) $(PDFMANPAGES) $(HTMLDOCS)
+docs: $(MANPAGES)
 
 z80code: $(Z80CODE)
 
@@ -82,10 +82,10 @@ z80code: $(Z80CODE)
 include Makefile.local
 
 CFLAGS += $(DEBUG) $(ENDIAN) $(DEFAULT_ROM) $(READLINE) $(DISKDIR) $(IFLAGS) \
-	$(APPDEFAULTS) -DKBWAIT -std=c11
+	$(APPDEFAULTS) $(FASTMEM) -DKBWAIT -std=c11
 LIBS = $(XLIB) $(READLINELIBS) $(EXTRALIBS)
 
-ZMACFLAGS = -h
+ZMACFLAGS =
 
 .SUFFIXES: .z80 .cmd .dct .man .txt .hex .html
 

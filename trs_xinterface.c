@@ -158,6 +158,7 @@ static XrmOptionDescRec opts[] = {
 {"-huffman",    "*huffman",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-supermem",   "*supermem",    XrmoptionNoArg,         (caddr_t)"on"},
 {"-selector",   "*selector",    XrmoptionNoArg,         (caddr_t)"on"},
+{"-lower",      "*lower",       XrmoptionNoArg,         (caddr_t)"on"},
 };
 
 static int num_opts = (sizeof opts / sizeof opts[0]);
@@ -467,6 +468,15 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
       selector = 0;
     } else if (strcmp(value.addr,"off") == 0) {
       supermem = 0;
+    }
+  }
+
+  (void) sprintf(option, "%s%s", program_name, ".lower");
+  if (XrmGetResource(x_db, option, "Xtrs.lower", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      lowercase = 1;
+    } else if (strcmp(value.addr,"off") == 0) {
+      lowercase = 0;
     }
   }
 
@@ -1485,14 +1495,12 @@ void trs_screen_write_char(int position, int char_index)
     } 
   } else if (usefont) {
     /* Draw character using a font */
-    if (trs_model == 1) {
-#if !UPPERCASE
+    if (trs_model == 1 && !lowercase) {
       /* Emulate Radio Shack lowercase mod.  The replacement character
 	 generator ROM had another copy of the uppercase characters in
 	 the control character positions, to compensate for a bug in the
 	 Level II ROM that stores such values instead of uppercase. */
       if (char_index < 0x20) char_index += 0x40;
-#endif
     }
     if (trs_model > 1 && char_index >= 0xc0 &&
 	(currentmode & (ALTERNATE+INVERSE)) == 0) {

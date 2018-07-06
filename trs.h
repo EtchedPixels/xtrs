@@ -136,6 +136,7 @@ extern int selector;
 
 extern void selector_out(unsigned char);
 
+extern int lowercase;
 void mem_video_page(int which);
 void mem_bank(int which);
 void mem_bank_base(int bits);

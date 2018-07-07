@@ -256,8 +256,10 @@ void mem_romin(int state)
 
 void mem_init()
 {
-    /* A selector fitted machine potentially has real RAM low */
-    if (trs_model <= 3 && selector == 0) {
+    /* For the model 3 we load the ROM into a single simple map.
+       Now we have selector support for the model 1 we can't. It'll
+       also be handy for things like Omikron mapper */
+    if (trs_model == 3) {
 	rom = &memory[ROM_START];
 	video = &memory[VIDEO_START];
 	trs_video_size = 1024;
@@ -330,8 +332,8 @@ static int trs80_model1_ram(int address)
 
 static int trs80_model1_mmio(int address)
 {
-  if (address >= VIDEO_START) return memory[address];
-  if (address < trs_rom_size) return memory[address];
+  if (address >= VIDEO_START) return video[address + video_offset];
+  if (address < trs_rom_size) return rom[address];
   if (address == TRSDISK_DATA) return trs_disk_data_read();
   if (TRS_INTLATCH(address)) return trs_interrupt_latch_read();
   if (address == TRSDISK_STATUS) return trs_disk_status_read();
@@ -658,9 +660,6 @@ static Uchar *trs80_model1_ram_addr(int address)
      extra check */
   if ((selector_reg & 7) == 6) {
     if (address >= 0xC000) {
-      /* We have no low 16K of RAM. This is for the LNW80 really */
-      if (!(selector_reg & 8))
-	return NULL;
       /* Use the low 16K, and then bank it. I'm not 100% sure how the
          PAL orders the two */
       offset &= 0x3FFF;
@@ -677,7 +676,7 @@ static Uchar *trs80_model1_ram_addr(int address)
 
 static Uchar *trs80_model1_mmio_addr(int address, int writing)
 {
-  if (address >= VIDEO_START) return memory + address;
+  if (address >= VIDEO_START) return video + address;
   if (address < trs_rom_size && !writing) return memory + address;
   /* With a selector 768 bytes poke through the hole */
   if (address >= 0x3900 && selector)

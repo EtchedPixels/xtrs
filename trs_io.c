@@ -106,6 +106,18 @@ void z80_out(int port, int value)
     case 0xB5: /* Orchestra-85 right channel */
       trs_orch90_out(2, value);
       break;
+    case 0xEC:
+      lowe_le18_write_data(value);
+      break;
+    case 0xED:
+      lowe_le18_write_x(value);
+      break;
+    case 0xEE:
+      lowe_le18_write_y(value);
+      break;
+    case 0xEF:
+      lowe_le18_write_control(value);
+      break;
     case 0xF0:
     case 0xF1:
     case 0xF2:
@@ -407,6 +419,9 @@ int z80_in(int port)
     case 0x43: /* Supermem memory expansion */
       value = mem_read_bank_base();
       goto done;
+    case 0xEC:
+      return lowe_le18_read();
+      break;
     case 0xF0:
     case 0xF1:
     case 0xF2:

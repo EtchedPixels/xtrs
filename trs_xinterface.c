@@ -158,6 +158,7 @@ static XrmOptionDescRec opts[] = {
 {"-huffman",    "*huffman",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-supermem",   "*supermem",    XrmoptionNoArg,         (caddr_t)"on"},
 {"-selector",   "*selector",    XrmoptionNoArg,         (caddr_t)"on"},
+{"-le18",       "*le18",        XrmoptionNoArg,         (caddr_t)"on"},
 {"-lower",      "*lower",       XrmoptionNoArg,         (caddr_t)"on"},
 };
 
@@ -468,6 +469,15 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
       selector = 0;
     } else if (strcmp(value.addr,"off") == 0) {
       supermem = 0;
+    }
+  }
+
+  (void) sprintf(option, "%s%s", program_name, ".le18");
+  if (XrmGetResource(x_db, option, "Xtrs.le18", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      lowe_le18 = 1;
+    } else if (strcmp(value.addr,"off") == 0) {
+      lowe_le18 = 0;
     }
   }
 
@@ -1811,6 +1821,68 @@ unsigned char grafyx_m3_read_byte(int position)
 int grafyx_m3_active()
 {
   return (trs_model == 3 && grafyx_microlabs && (grafyx_mode & G3_COORD));
+}
+
+/*
+ *	The Lowe Electronics LE18 is yet another fairly simple
+ *	I/O based 384x192 graphics adapter writing 6bits per
+ *	TRS80 character
+ *
+ *	Port EC (R)
+ *	7: goes high for blanking - can spin until high to avoid noise
+ *	6: on/off status
+ *	5-0: pixel data bit 0 is left
+ *
+ *	Port ED (W)
+ *	7-6: unused
+ *	5-0: X position (chars)
+ *	Port EE (W)
+ *	7-0: Y position (lines)
+ *
+ *	Port EF (W)
+ *	7-1: unused
+ *	0: hi res (1 = on)
+ */
+
+static unsigned char le18_x, le18_y, le18_on;
+int lowe_le18;
+
+void lowe_le18_reset(void)
+{
+}
+
+void lowe_le18_write_x(int value)
+{
+  le18_x = value & 31;
+}
+
+void lowe_le18_write_y(int value)
+{
+  le18_y = value;
+}
+
+int lowe_le18_read(void)
+{
+  if (!lowe_le18)
+    return 0xFF;
+  return (grafyx_unscaled[le18_y][le18_x] & 0x1F) | 0x80
+          | ((le18_on) ? 0x40 : 0x00);
+}
+
+void lowe_le18_write_data(int value)
+{
+  if (lowe_le18)
+    grafyx_write_byte(le18_x, le18_y, value & 0x1F);
+}
+
+void lowe_le18_write_control(int value)
+{
+  if (lowe_le18 && ((le18_on ^ value) & 1)) {
+    le18_on ^= 1;
+    grafyx_enable = le18_on;
+    grafyx_overlay = le18_on;
+    trs_screen_refresh();
+  }
 }
 
 /*

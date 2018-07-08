@@ -136,7 +136,7 @@ void mem_bank_base(int bits)
 	if (trs_model < 4 && supermem) {
 		/* Emulate a 512Kb system which is a fairly typical board.
 		   256/512/768/1024K were available for the Model I and
-		   more for the model III */
+		   more for the model III (3MB MegaMem) */
 		bits &= 0x0F; /* 15 bits of address + 4bits logical */
 		bank_base = bits << 15;
 	}

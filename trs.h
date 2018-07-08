@@ -172,6 +172,13 @@ void hrg_onoff(int enable);
 void hrg_write_addr(int addr, int mask);
 void hrg_write_data(int data);
 int hrg_read_data(void);
+int lowe_le18;
+void lowe_le18_reset(void);
+void lowe_le18_write_x(int);
+void lowe_le18_write_y(int);
+int lowe_le18_read(void);
+void lowe_le18_write_data(int);
+void lowe_le18_write_control(int);
 
 void trs_get_mouse_pos(int *x, int *y, unsigned int *buttons);
 void trs_set_mouse_pos(int x, int y);

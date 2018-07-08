@@ -1864,24 +1864,41 @@ void lowe_le18_write_y(int value)
   le18_y = value;
 }
 
+static unsigned char pack8to6(unsigned char c)
+{
+  return ((c & 0x70) >> 1) | (c & 7);
+}
+
+static unsigned char expand6to8(unsigned char c)
+{
+  unsigned char r;
+  r = (c & 0x07);
+  if (r & 0x04)
+    r |= 0x08;
+  r |= (c << 1) & 0x70;
+  if (r & 0x40)
+    r |= 0x80;
+  return r;
+}
+
 int lowe_le18_read(void)
 {
   if (!lowe_le18)
     return 0xFF;
-  return (grafyx_unscaled[le18_y][le18_x] & 0x1F) | 0x80
+  return pack8to6(grafyx_unscaled[le18_y][le18_x]) | 0x80
           | ((le18_on) ? 0x40 : 0x00);
 }
 
 void lowe_le18_write_data(int value)
 {
   if (lowe_le18)
-    grafyx_write_byte(le18_x, le18_y, value & 0x1F);
+    grafyx_write_byte(le18_x, le18_y, expand6to8(value & 0x3F));
 }
 
 void lowe_le18_write_control(int value)
 {
   if (lowe_le18 && ((le18_on ^ value) & 1)) {
-    le18_on ^= 1;
+    le18_on = value & 1;
     grafyx_enable = le18_on;
     grafyx_overlay = le18_on;
     trs_screen_refresh();

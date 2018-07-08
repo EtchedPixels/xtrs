@@ -1853,7 +1853,7 @@ void lowe_le18_reset(void)
 
 void lowe_le18_write_x(int value)
 {
-  le18_x = value & 31;
+  le18_x = value & 63;
 }
 
 void lowe_le18_write_y(int value)

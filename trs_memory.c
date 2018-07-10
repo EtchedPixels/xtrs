@@ -83,22 +83,27 @@ void mem_bank(int command)
 {
     switch (command) {
       case 0:
+        /* L64 Lower / Upper */
 	bank_offset[0] = 0 << 15;
 	bank_offset[1] = 0 << 15;
 	break;
       case 2:
+        /* L64 Lower / H64 Lower */
 	bank_offset[0] = 0 << 15;
-	bank_offset[1] = 1 << 15;
+	bank_offset[1] = bank_base - (1 << 15);
 	break;
       case 3:
+        /* L64 Lower / H64 upper */
 	bank_offset[0] = 0 << 15;
 	bank_offset[1] = (0 << 15) + bank_base;
 	break;
       case 6:
+        /* H64 Lower / L64 upper */
 	bank_offset[0] = (0 << 15) + bank_base;
 	bank_offset[1] = 0 << 15;
 	break;
       case 7:
+        /* H64 Upper / L64 Upper */
 	bank_offset[0] = (1 << 15) + bank_base;
 	bank_offset[1] = 0 << 15;
 	break;
@@ -131,6 +136,13 @@ void mem_bank_base(int bits)
 		bank_base = bits << 16;
 		mem_bank(mem_command);
 	}
+	if (hypermem) {
+	        /* HyperMem replaces the upper 64K bank with multiple
+	           banks according to port 0x90 bits 4-1 */
+		bits &= 0x1E;
+		bank_base = bits << 15;
+		mem_bank(mem_command);
+	}
 	/* For the model 1 with the Alpha products SuperMem the top 32K
 	   switches between 32K banks. We keep them at 64K+ in the array */
 	if (trs_model < 4 && supermem) {
@@ -148,6 +160,7 @@ int mem_read_bank_base(void)
 		return (bank_base >> 16) & 0x1F;
 	if (trs_model < 4 && supermem)
 		return bank_base >> 15;
+        /* And the HyperMem appears to be write-only */
 	return 0xFF;
 }
 
@@ -203,6 +216,8 @@ void trs_reset(int poweron)
 	z80_out(0x84, 0);
 	if (huffman_ram)
 		z80_out(0x94, 0);
+        if (hypermem)
+                z80_out(0x90, 0);
     }
     if (trs_model >= 3) {
 	grafyx_write_mode(0);

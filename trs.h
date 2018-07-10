@@ -131,6 +131,7 @@ int trs_disk_motoroff(void);
 void trs_change_all(void);
 
 extern int huffman_ram;
+extern int hypermem;
 extern int supermem;
 extern int selector;
 

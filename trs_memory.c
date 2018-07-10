@@ -68,6 +68,7 @@ unsigned int bank_base = 0x10000;
 unsigned char mem_command = 0;
 int huffman_ram = 0;
 int supermem = 0;
+int hypermem = 0;
 int selector = 0;
 int selector_reg = 0;
 
@@ -140,6 +141,8 @@ void mem_bank_base(int bits)
 	        /* HyperMem replaces the upper 64K bank with multiple
 	           banks according to port 0x90 bits 4-1 */
 		bits &= 0x1E;
+		/* 0 base is upper bank of 64K */
+		bits += 2;
 		bank_base = bits << 15;
 		mem_bank(mem_command);
 	}

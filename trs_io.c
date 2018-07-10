@@ -207,13 +207,17 @@ void z80_out(int port, int value)
       if (trs_model >= 4) grafyx_write_overlay(value);
       break;
     case 0x90:
+      /* HyperMem uses bits 4-1 of this port, 0 is the existing
+         sound */
+      if (hypermem && trs_model >= 4)
+        mem_bank_base(value);
     case 0x91:
     case 0x92:
     case 0x93:
       trs_sound_out(value & 1);
       break;
     case 0x94:			/* Huffman memory expansion */
-      if (trs_model >= 4)
+      if (trs_model >= 4 && huffman_ram)
         mem_bank_base(value);
       break;
     case 0x9C:
@@ -505,7 +509,7 @@ int z80_in(int port)
       value = trs_disk_data_read();
       goto done;
     case 0xF8:
-      value = trs_printer_read();
+      value = trs_printer_read() | (ctrlimage & 0x0F);
       goto done;
     case 0xFF:
       value = (modeimage & 0x7e) | trs_cassette_in();

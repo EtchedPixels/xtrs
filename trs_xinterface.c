@@ -455,7 +455,7 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
   }
 
   (void) sprintf(option, "%s%s", program_name, ".hypermem");
-  if (XrmGetResource(x_db, option, "Xtrs.huffman", &type, &value)) {
+  if (XrmGetResource(x_db, option, "Xtrs.hypermem", &type, &value)) {
     if (strcmp(value.addr,"on") == 0) {
       hypermem = 1;
       huffman_ram = 0;

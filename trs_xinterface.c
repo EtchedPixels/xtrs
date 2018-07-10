@@ -155,6 +155,7 @@ static XrmOptionDescRec opts[] = {
 {"-noshiftbracket","*shiftbracket",XrmoptionNoArg,      (caddr_t)"off"},
 {"-emtsafe",    "*emtsafe",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-noemtsafe",  "*emtsafe",     XrmoptionNoArg,         (caddr_t)"off"},
+{"-hypermem",   "*hypermem",    XrmoptionNoArg,         (caddr_t)"on"},
 {"-huffman",    "*huffman",     XrmoptionNoArg,         (caddr_t)"on"},
 {"-supermem",   "*supermem",    XrmoptionNoArg,         (caddr_t)"on"},
 {"-selector",   "*selector",    XrmoptionNoArg,         (caddr_t)"on"},
@@ -450,6 +451,16 @@ int trs_parse_command_line(int argc, char **argv, int *debug)
       huffman_ram = 1;
     } else if (strcmp(value.addr,"off") == 0) {
       huffman_ram = 0;
+    }
+  }
+
+  (void) sprintf(option, "%s%s", program_name, ".hypermem");
+  if (XrmGetResource(x_db, option, "Xtrs.huffman", &type, &value)) {
+    if (strcmp(value.addr,"on") == 0) {
+      hypermem = 1;
+      huffman_ram = 0;
+    } else if (strcmp(value.addr,"off") == 0) {
+      hypermem = 0;
     }
   }
 

@@ -35,6 +35,11 @@
 #define MAX_ROM_SIZE	(0x3800)
 #define MAX_VIDEO_SIZE	(0x0800)
 
+/* 512K is the largest we support. There were it seems 1MByte
+   options at some point which is the full range of the mapping.
+   How the mapping register worked for > 1MB is not known */
+#define MAX_SUPERMEM_SIZE 	(0x80000)
+
 /* Locations for Model I, Model III, and Model 4 map 0 */
 #define ROM_START	(0x0000)
 #define IO_START	(0x3000)
@@ -68,6 +73,9 @@ unsigned int bank_base = 0x10000;
 unsigned char mem_command = 0;
 int huffman_ram = 0;
 int supermem = 0;
+Uchar *supermem_ram;
+int supermem_base;
+unsigned int supermem_hi;
 int hypermem = 0;
 int selector = 0;
 int selector_reg = 0;
@@ -124,10 +132,18 @@ void mem_bank(int command)
  *	5: sometimes used for > 4MHz turbo mod
  *	4-0: Bits A20-A16 of the alt bank
  *
- *	Starts as 1 on a reset so that you get the 'classic' memory map
- *
+ *	Set to 1 on a reset so that you get the 'classic' memory map
  *	This port is read-write and the drivers depend upon it
  *	(See RAMDV364.ASM)
+ *
+ *	The Hypermem is very similar and also changes the upper
+ *	64K bank between multiple banks. However the values
+ *	are on port 0x90 (sound) bits 4-1, which is a much poorer
+ *	design IMHO as sound using apps can randomly change the
+ *	upper bank. Fine for a ramdisc but means other software
+ *	must take great care.
+ *
+ *	The MegaMem mappings are not known and not emulated.
  */
 
 void mem_bank_base(int bits)
@@ -146,14 +162,17 @@ void mem_bank_base(int bits)
 		bank_base = bits << 15;
 		mem_bank(mem_command);
 	}
-	/* For the model 1 with the Alpha products SuperMem the top 32K
-	   switches between 32K banks. We keep them at 64K+ in the array */
-	if (trs_model < 4 && supermem) {
-		/* Emulate a 512Kb system which is a fairly typical board.
-		   256/512/768/1024K were available for the Model I and
-		   more for the model III (3MB MegaMem) */
+	if (supermem) {
+		/* Emulate a 512Kb system. A standard model 1 SuperMEM is 256K
+		   or 512K with double stacked chips */
 		bits &= 0x0F; /* 15 bits of address + 4bits logical */
-		bank_base = bits << 15;
+		supermem_base = bits << 15;
+		/* The supermem can flip the low or high 32K. Set
+		   bit 5 to map low */
+                if (bits & 0x20)
+                    supermem_hi = 0x0000;
+                else
+                    supermem_hi = 0x8000;
 	}
 }
 
@@ -161,8 +180,9 @@ int mem_read_bank_base(void)
 {
 	if (huffman_ram)
 		return (bank_base >> 16) & 0x1F;
-	if (trs_model < 4 && supermem)
-		return bank_base >> 15;
+	if (supermem)
+		return (supermem_base >> 15) |
+		      ((supermem_hi == 0) ? 0x20 : 0);
         /* And the HyperMem appears to be write-only */
 	return 0xFF;
 }
@@ -209,6 +229,9 @@ void trs_reset(int poweron)
     trs_hard_reset();
     stringy_reset();
     trs_change_all();
+
+    supermem_base = 0;
+    supermem_hi = 0x8000;
 
     if (trs_model == 5) {
         /* Switch in boot ROM */
@@ -274,22 +297,18 @@ void mem_romin(int state)
 
 void mem_init()
 {
-    /* For the model 3 we load the ROM into a single simple map.
-       Now we have selector support for the model 1 we can't. It'll
-       also be handy for things like Omikron mapper */
-    if (trs_model == 3) {
-	rom = &memory[ROM_START];
-	video = &memory[VIDEO_START];
-	trs_video_size = 1024;
-    } else {
-	/* +1 so strings from mem_pointer are NUL-terminated */
-	rom = (Uchar *) calloc(MAX_ROM_SIZE+1, 1);
-	video = (Uchar *) calloc(MAX_VIDEO_SIZE+1, 1);
-	if (trs_model == 1)
-          trs_video_size = 1024;
-        else
-	  trs_video_size = MAX_VIDEO_SIZE;
-    }
+    /* +1 so strings from mem_pointer are NUL-terminated */
+    rom = (Uchar *) calloc(MAX_ROM_SIZE+1, 1);
+    video = (Uchar *) calloc(MAX_VIDEO_SIZE+1, 1);
+    if (trs_model < 4)
+        trs_video_size = 1024;
+    else
+        trs_video_size = MAX_VIDEO_SIZE;
+
+    /* We map the SuperMem separately, otherwise it can get really
+       confusing when combining with other stuff */
+    if (supermem)
+        supermem_ram = (Uchar *) calloc(MAX_SUPERMEM_SIZE + 1, 1);
     mem_map(0);
     mem_bank(0);
     mem_video_page(0);
@@ -342,7 +361,7 @@ static int trs80_model1_ram(int address)
   /* Bank low on odd modes */
   if ((selector_reg & 1) == 1)
     bank = 0;
-  /* Deal with 32K banking from selector or supermem */
+  /* Deal with 32K banking from selector */
   if ((address & 0x8000) == bank)
     offset += bank_base;
   return memory[offset];
@@ -369,6 +388,17 @@ int mem_read(int address)
 {
     address &= 0xffff; /* allow callers to be sloppy */
 
+    /* There are some adapters that sit above the system and
+       either intercept before the hardware proper, or adjust
+       the address. Deal with these first so that we take their
+       output and feed it into the memory map */
+
+    /* The SuperMem sits between the system and the Z80 */
+    if (supermem) {
+      if (!((address ^ supermem_hi) & 0x8000))
+          return supermem_ram[supermem_base + (address & 0x7FFF)];
+      /* Otherwise the request comes from the system */
+    }
     switch (memory_map) {
       case 0x10: /* Model I */
         if (address < 0x4000)
@@ -400,13 +430,9 @@ int mem_read(int address)
         return 0xFF;	/* Not clear what really happens */
 
       case 0x30: /* Model III */
-         /* A Model 4 using a model 1 map doesn't do this shift with
-            a Supermem card */
-        if (trs_model == 3 && address >= 32768)
-	  return memory[address + bank_base];
 	if (address >= RAM_START) return memory[address];
 	if (address == PRINTER_ADDRESS)	return trs_printer_read();
-	if (address < trs_rom_size) return memory[address];
+	if (address < trs_rom_size) return rom[address];
 	if (address >= VIDEO_START) {
 	  return grafyx_m3_read_byte(address - VIDEO_START);
 	}
@@ -536,10 +562,17 @@ void mem_write(int address, int value)
 {
     address &= 0xffff;
 
+    /* The SuperMem sits between the system and the Z80 */
+    if (supermem) {
+      if (!((address ^ supermem_hi) & 0x8000)) {
+          supermem_ram[supermem_base + (address & 0x7FFF)] = value;
+          return;
+      }
+      /* Otherwise the request comes from the system */
+    }
+
     switch (memory_map) {
       case 0x10: /* Model I */
-        /* A Model 4 using a model 1 map doesn't do this shift with
-           a Supermem card */
         if (address >= RAM_START)
           trs80_model1_write_mem(address, value);
 	else
@@ -576,11 +609,7 @@ void mem_write(int address, int value)
         break;	/* Not clear what really happens */
 
       case 0x30: /* Model III */
-        /* A Model 4 using a model 1 map doesn't do this shift with
-           a Supermem card */
-        if (trs_model == 3 && address >= 32768)
-            memory[address + bank_base] = value;
-	else if (address >= RAM_START) {
+	if (address >= RAM_START) {
 	    memory[address] = value;
 	} else if (address >= VIDEO_START) {
 	    int vaddr = address + video_offset;
@@ -714,6 +743,13 @@ Uchar *mem_pointer(int address, int writing)
 {
     address &= 0xffff;
 
+    /* The SuperMem sits between the system and the Z80 */
+    if (supermem) {
+      if (!((address ^ supermem_hi) & 0x8000))
+          return supermem_ram + supermem_base + (address & 0x7FFF);
+      /* Otherwise the request comes from the system */
+    }
+
     switch (memory_map + (writing << 3)) {
       case 0x10: /* Model I */
       case 0x18:
@@ -751,7 +787,8 @@ Uchar *mem_pointer(int address, int writing)
 	return NULL;
 
       case 0x38: /* Model III writing */
-	if (address >= VIDEO_START) return &memory[address];
+	if (address >= RAM_START) return &memory[address];
+	if (address >= VIDEO_START) return &video[address + video_offset];
 	return NULL;
 
       case 0x40: /* Model 4 map 0 reading */

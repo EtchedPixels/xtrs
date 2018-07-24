@@ -34,7 +34,7 @@ mod4p:	ld	hl,model-fakemsg+video
 	ld	(hl),'P'
 	jr	$
 
-fakemsg:defb	'You do not have a ROM image installed for Model '
+fakemsg:defb	'YOU DO NOT HAVE A ROM IMAGE INSTALLED FOR MODEL '
 model	equ	$
 fmend	equ	$
 m4msg:	defb	'(Model 4 mode requires a Model 3 ROM image)'

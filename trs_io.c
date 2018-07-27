@@ -211,6 +211,7 @@ void z80_out(int port, int value)
          sound */
       if (hypermem && trs_model >= 4)
         mem_bank_base(value);
+      /* Fall through - we affect the sound as well */
     case 0x91:
     case 0x92:
     case 0x93:
